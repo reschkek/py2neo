@@ -329,7 +329,7 @@ class Graph(object):
                 auth = get_auth(address)
                 inst.driver = GraphDatabase.driver(address.bolt_uri("/"),
                                                    auth=None if auth is None else auth.bolt_auth_token,
-                                                   encypted=address.secure,
+                                                   encrypted=address.secure,
                                                    user_agent="/".join(PRODUCT))
                 inst.transaction_class = BoltTransaction
             inst.node_selector = NodeSelector(inst)
@@ -1326,17 +1326,17 @@ class Cursor(object):
     records, a `while` loop can be used::
 
         while cursor.forward():
-            print(cursor.current["name"])
+            print(cursor.current()["name"])
 
     If only the first record is of interest, a similar `if` structure will
     do the job::
 
         if cursor.forward():
-            print(cursor.current["name"])
+            print(cursor.current()["name"])
 
     To combine `forward` and `current` into a single step, use :attr:`.next`::
 
-        print(cursor.next["name"])
+        print(cursor.next()["name"])
 
     Cursors are also iterable, so can be used in a loop::
 
@@ -1453,7 +1453,7 @@ class Cursor(object):
         """
         if self.forward():
             try:
-                return self._current[field]
+                return self.current()[field]
             except IndexError:
                 return None
         else:
@@ -1486,6 +1486,12 @@ class Cursor(object):
             2    1961  Laurence Fishburne
             3    1960        Hugo Weaving
 
+        Similarly, to output the result data as a JSON-formatted string::
+
+            >>> import json
+            >>> json.dumps(graph.run("UNWIND range(1, 3) AS n RETURN n").data())
+            '[{"n": 1}, {"n": 2}, {"n": 3}]'
+
         :return: the full query result
         :rtype: `list` of `dict`
         """
@@ -1513,7 +1519,7 @@ class Cursor(object):
             out.write(u"\n")
 
 
-class Record(tuple, Mapping, Subgraph):
+class Record(tuple, Mapping):
     """ A :class:`.Record` holds a collection of result values that are
     both indexed by position and keyed by name. A `Record` instance can
     therefore be seen as a combination of a `tuple` and a `Mapping`.
@@ -1527,14 +1533,6 @@ class Record(tuple, Mapping, Subgraph):
 
     def __init__(self, keys, values):
         self.__keys = tuple(keys)
-        nodes = []
-        relationships = []
-        for value in values:
-            if hasattr(value, "nodes"):
-                nodes.extend(value.nodes())
-            if hasattr(value, "relationships"):
-                relationships.extend(value.relationships())
-        Subgraph.__init__(self, nodes, relationships)
         self.__repr = None
 
     def __repr__(self):
@@ -1577,3 +1575,16 @@ class Record(tuple, Mapping, Subgraph):
 
     def data(self):
         return dict(self)
+
+    def subgraph(self):
+        nodes = []
+        relationships = []
+        for value in self:
+            if hasattr(value, "nodes"):
+                nodes.extend(value.nodes())
+            if hasattr(value, "relationships"):
+                relationships.extend(value.relationships())
+        if nodes:
+            return Subgraph(nodes, relationships)
+        else:
+            return None
